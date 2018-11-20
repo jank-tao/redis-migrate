@@ -6,6 +6,9 @@ redis 数据迁移工具
 ```
 go get -v https://github.com/liguangsheng/redis-migrate
 ```
+```
+redis-migrate -c redis-migrate.json -t task1
+```
 
 # example config
 ```
