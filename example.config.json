@@ -1,14 +1,3 @@
-# redis-migrate
-A tool to migrate data bwtween redis servers
-
-redis 数据迁移工具
-
-```
-go get -v https://github.com/liguangsheng/redis-migrate
-```
-
-# example config
-```
 {
   "redis": {
     "remote_redis": {
@@ -38,14 +27,3 @@ go get -v https://github.com/liguangsheng/redis-migrate
     }
   }
 }
-```
-
-
-```
-$ redis-migrate --help
-Usage of redis-migrate:
-  -c string
-    	config file (default "example.config.json")
-  -t string
-    	task name (default "default")
-```
