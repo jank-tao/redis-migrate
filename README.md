@@ -52,3 +52,10 @@ Usage of redis-migrate:
   -t string
     	task name (default "default")
 ```
+
+# TODO
+
+- pipeline加速
+- goroutine加速
+- 更多数据类型支持
+- 文件导入导出
