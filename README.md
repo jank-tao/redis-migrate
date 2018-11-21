@@ -61,6 +61,5 @@ Usage of redis-migrate:
 
 # TODO
 
-- accelerate by goroutine
 - dump to file
 - load from file
