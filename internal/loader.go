@@ -1,9 +1,7 @@
 package internal
 
 import (
-	"fmt"
 	"gopkg.in/redis.v5"
-	"time"
 )
 
 type RedisLoader struct {
@@ -53,9 +51,9 @@ func (l *RedisLoader) loadString(item *RedisItem) error {
 		return err
 	}
 
-	if item.TTL != time.Second*-1 {
-		l.Client.Expire(item.Key, item.TTL)
-	}
+	//if item.TTL != time.Second*-1 {
+	//	l.Client.Expire(item.Key, item.TTL)
+	//}
 	return nil
 }
 
@@ -65,9 +63,9 @@ func (l *RedisLoader) loadList(item *RedisItem) error {
 		pipe.LPush(item.Key, i)
 	}
 
-	if item.TTL != time.Second*-1 {
-		pipe.Expire(item.Key, item.TTL)
-	}
+	//if item.TTL != time.Second*-1 {
+	//	pipe.Expire(item.Key, item.TTL)
+	//}
 	pipe.Exec()
 	return nil
 }
@@ -77,10 +75,9 @@ func (l *RedisLoader) loadHash(item *RedisItem) error {
 		return err
 	}
 
-	if item.TTL != time.Second*-1 {
-		fmt.Println(item.TTL)
-		l.Client.Expire(item.Key, item.TTL)
-	}
+	//if item.TTL != time.Second*-1 {
+	//	l.Client.Expire(item.Key, item.TTL)
+	//}
 	return nil
 }
 
@@ -90,9 +87,9 @@ func (l *RedisLoader) loadSet(item *RedisItem) error {
 		pipe.SAdd(item.Key, i)
 	}
 
-	if item.TTL != time.Second*-1 {
-		pipe.Expire(item.Key, item.TTL)
-	}
+	//if item.TTL != time.Second*-1 {
+	//	pipe.Expire(item.Key, item.TTL)
+	//}
 	pipe.Exec()
 	return nil
 }
@@ -103,9 +100,9 @@ func (l *RedisLoader) loadZSet(item *RedisItem) error {
 		pipe.ZAdd(item.Key, i)
 	}
 
-	if item.TTL != time.Second*-1 {
-		pipe.Expire(item.Key, item.TTL)
-	}
+	//if item.TTL != time.Second*-1 {
+	//	pipe.Expire(item.Key, item.TTL)
+	//}
 	pipe.Exec()
 	return nil
 }
