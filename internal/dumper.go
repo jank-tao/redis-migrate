@@ -1,143 +1,94 @@
 package internal
 
 import (
-	"gopkg.in/redis.v5"
+	"errors"
+	"fmt"
+	"github.com/gomodule/redigo/redis"
 )
 
-type RedisDumper struct {
-	Client *redis.Client
+// =====================
+// RedisDumper interface
+type IRedisDumper interface {
+	Dump(key string, opt migrateOption) (*RedisObject, error)
 }
 
-func (d *RedisDumper) DumpKeys(patterns ...string) ([]*RedisItem, error) {
-	res := make([]*RedisItem, 0)
-	for _, pattern := range patterns {
-		keys, err := d.Client.Keys(pattern).Result()
-		if err != nil {
-			return nil, err
-		}
-
-		for _, key := range keys {
-			item, err := d.Dump(key)
-			if err != nil {
-				return nil, err
-			}
-			res = append(res, item)
-		}
+func NewRedisDumper(rc redis.Conn) IRedisDumper {
+	return &redisDumper{
+		rc: rc,
 	}
-	return res, nil
 }
 
-func (d *RedisDumper) Dump(key string) (*RedisItem, error) {
-	keyType, err := d.Client.Type(key).Result()
+// =====================
+// RedisDumper implement
+type redisDumper struct {
+	rc redis.Conn
+}
+
+func (d *redisDumper) Dump(key string, opt migrateOption) (*RedisObject, error) {
+	d.rc.Send("EXISTS", key)
+	d.rc.Send("TYPE", key)
+	d.rc.Send("TTL", key)
+	d.rc.Flush()
+
+	exists, err := redis.Bool(d.rc.Receive())
+	if err != nil || !exists {
+		return nil, err
+	}
+
+	_type, err := redis.String(d.rc.Receive())
 	if err != nil {
 		return nil, err
 	}
 
-	switch keyType {
+	ttl, err := redis.Int(d.rc.Receive())
+	if err != nil || (-1 < ttl && ttl < 5) {
+		return nil, err
+	}
+
+	var data interface{}
+	switch _type {
 	case "string":
-		return d.dumpString(key)
+		data, err = d.dumpString(key)
 	case "list":
-		return d.dumpList(key)
+		data, err = d.dumpList(key)
 	case "hash":
-		return d.dumpHash(key)
+		data, err = d.dumpHash(key)
 	case "set":
-		return d.dumpSet(key)
+		data, err = d.dumpSet(key)
 	case "zset":
-		return d.dumpZSet(key)
-	}
-	return nil, nil
-}
-
-func (d *RedisDumper) dumpString(key string) (*RedisItem, error) {
-	data, err := d.Client.Get(key).Result()
-	if err != nil && err != redis.Nil {
-		return nil, err
+		data, err = d.dumpZSet(key)
+	default:
+		return nil, errors.New(fmt.Sprintf("not support type: %s", _type))
 	}
 
-	ttl, err := d.Client.TTL(key).Result()
 	if err != nil {
 		return nil, err
 	}
 
-	return &RedisItem{
-		Key:        key,
-		Type:       "string",
-		TTL:        ttl,
-		StringData: data,
+	return &RedisObject{
+		Key:  key,
+		Type: _type,
+		TTL:  ttl,
+		Data: data,
 	}, nil
 }
 
-func (d *RedisDumper) dumpList(key string) (*RedisItem, error) {
-	data, err := d.Client.LRange(key, 0, -1).Result()
-	if err != nil && err != redis.Nil {
-		return nil, err
-	}
-
-	ttl, err := d.Client.TTL(key).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	return &RedisItem{
-		Key:      key,
-		Type:     "list",
-		TTL:      ttl,
-		ListData: data,
-	}, nil
+func (d *redisDumper) dumpString(key string) (interface{}, error) {
+	return d.rc.Do("GET", key)
 }
 
-func (d *RedisDumper) dumpHash(key string) (*RedisItem, error) {
-	data, err := d.Client.HGetAll(key).Result()
-	if err != nil && err != redis.Nil {
-		return nil, err
-	}
-
-	ttl, err := d.Client.TTL(key).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	return &RedisItem{
-		Key:      key,
-		Type:     "hash",
-		TTL:      ttl,
-		HashData: data,
-	}, nil
+func (d *redisDumper) dumpList(key string) (interface{}, error) {
+	return d.rc.Do("LRANGE", key, 0, -1)
 }
 
-func (d *RedisDumper) dumpSet(key string) (*RedisItem, error) {
-	data, err := d.Client.SMembers(key).Result()
-	if err != nil && err != redis.Nil {
-		return nil, err
-	}
-
-	ttl, err := d.Client.TTL(key).Result()
-	if err != nil {
-		return nil, err
-	}
-
-	return &RedisItem{
-		Key:      key,
-		Type:     "set",
-		TTL:      ttl,
-		ListData: data,
-	}, nil
+func (d *redisDumper) dumpHash(key string) (interface{}, error) {
+	return d.rc.Do("HGETALL", key)
 }
-func (d *RedisDumper) dumpZSet(key string) (*RedisItem, error) {
-	data, err := d.Client.ZRangeWithScores(key, 0, 9999999).Result()
-	if err != nil && err != redis.Nil {
-		return nil, err
-	}
 
-	ttl, err := d.Client.TTL(key).Result()
-	if err != nil {
-		return nil, err
-	}
+func (d *redisDumper) dumpSet(key string) (interface{}, error) {
+	return d.rc.Do("SMEMBERS", key)
+}
 
-	return &RedisItem{
-		Key:      key,
-		Type:     "zset",
-		TTL:      ttl,
-		ZSetData: data,
-	}, nil
+func (d *redisDumper) dumpZSet(key string) (interface{}, error) {
+	return d.rc.Do("ZRANGE", key, 0, -1, "WITHSCORES")
 }

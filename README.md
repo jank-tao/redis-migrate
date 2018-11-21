@@ -1,16 +1,22 @@
 # redis-migrate
-A tool to migrate data bwtween redis servers
+redis-migrate is a tool to migrate data between redis databases.
 
-redis 数据迁移工具
-
+## install
 ```
-go get -v https://github.com/liguangsheng/redis-migrate
-```
-```
-redis-migrate -c redis-migrate.json -t task1
+go get -u -v https://github.com/liguangsheng/redis-migrate
 ```
 
-# example config
+usage:
+```
+redis-migrate -c `/path/to/config/file` -t `task_name`
+```
+
+example:
+```
+redis-migrate -c redis-migrate.json -t default
+```
+
+## example config
 ```
 {
   "redis": {
@@ -55,7 +61,6 @@ Usage of redis-migrate:
 
 # TODO
 
-- pipeline加速
-- goroutine加速
-- 更多数据类型支持
-- 文件导入导出
+- accelerate by goroutine
+- dump to file
+- load from file

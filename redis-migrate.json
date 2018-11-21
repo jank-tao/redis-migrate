@@ -10,17 +10,22 @@
         "username": "username"
       }
     },
-    "local_redis": {
+    "local_redis0": {
       "addr": "127.0.0.1:6379",
       "password": "",
-      "db": 1,
-      "ssh_config": null
+      "db": 0
+    },
+    "local_redis1": {
+      "addr": "127.0.0.1:6379",
+      "password": "",
+      "db": 1
     }
   },
   "tasks": {
     "default": {
-      "from": "remote_redis",
-      "to": "local_redis",
+      "from": "local_redis0",
+      "to": "local_redis1",
+      "ignore_ttl": false,
       "patterns": [
         "*"
       ]

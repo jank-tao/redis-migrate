@@ -1,108 +1,113 @@
 package internal
 
 import (
-	"gopkg.in/redis.v5"
+	"github.com/gomodule/redigo/redis"
 )
 
-type RedisLoader struct {
-	Client *redis.Client
+// =====================
+// RedisLoader interface
+
+type IRedisLoader interface {
+	Load(obj *RedisObject, opt migrateOption) error
 }
 
-func (l *RedisLoader) LoadItems(items ...*RedisItem) error {
-	for _, item := range items {
-		if err := l.Load(item); err != nil {
-			return err
-		}
+func NewRedisLoader(rc redis.Conn) IRedisLoader {
+	return &redisLoader{
+		rc: rc,
 	}
-	return nil
 }
 
-func (l *RedisLoader) Load(item *RedisItem) error {
-	if item == nil {
+// =====================
+// RedisLoader implement
+type redisLoader struct {
+	rc redis.Conn
+}
+
+func (l *redisLoader) Load(obj *RedisObject, opt migrateOption) error {
+	if obj == nil {
 		return nil
 	}
 
-	ok, err := l.Client.Exists(item.Key).Result()
+	exists, err := redis.Bool(l.rc.Do("EXISTS", obj.Key))
+	if err != nil {
+		return err
+	}
+	if exists {
+		l.rc.Do("DEL", obj.Key)
+	}
+
+	switch obj.Type {
+	case "string":
+		err = l.loadString(obj)
+	case "list":
+		err = l.loadList(obj)
+	case "hash":
+		err = l.loadHash(obj)
+	case "set":
+		err = l.loadSet(obj)
+	case "zset":
+		err = l.loadZSet(obj)
+	}
+
 	if err != nil {
 		return err
 	}
 
-	if ok {
-		l.Client.Del(item.Key)
+	if !opt.IgnoreTTL && obj.TTL != -1 {
+		l.rc.Do("EXPIRE", obj.Key, obj.TTL)
 	}
 
-	switch item.Type {
-	case "string":
-		return l.loadString(item)
-	case "list":
-		return l.loadList(item)
-	case "hash":
-		return l.loadHash(item)
-	case "set":
-		return l.loadSet(item)
-	case "zset":
-		return l.loadZSet(item)
-	}
 	return nil
 }
 
-func (l *RedisLoader) loadString(item *RedisItem) error {
-	if err := l.Client.Set(item.Key, item.StringData, -1).Err(); err != nil {
+func (l *redisLoader) loadString(obj *RedisObject) error {
+	_, err := l.rc.Do("SET", obj.Key, obj.Data)
+	return err
+}
+
+func (l *redisLoader) loadList(obj *RedisObject) error {
+	values, err := redis.Values(obj.Data, nil)
+	if err != nil {
+		return err
+	}
+	args := append([]interface{}{obj.Key}, values...)
+	_, err = l.rc.Do("LPUSH", args...)
+	return err
+}
+
+func (l *redisLoader) loadHash(obj *RedisObject) error {
+	values, err := redis.Values(obj.Data, nil)
+	if err != nil {
+		return err
+	}
+	args := append([]interface{}{obj.Key}, values...)
+	_, err = l.rc.Do("HMSET", args...)
+	return err
+}
+
+func (l *redisLoader) loadSet(obj *RedisObject) error {
+	values, err := redis.Values(obj.Data, nil)
+	if err != nil {
+		return err
+	}
+	args := append([]interface{}{obj.Key}, values...)
+	_, err = l.rc.Do("SADD", args...)
+	return err
+}
+
+func (l *redisLoader) loadZSet(obj *RedisObject) error {
+	values, err := redis.Values(obj.Data, nil)
+	if err != nil {
 		return err
 	}
 
-	//if item.TTL != time.Second*-1 {
-	//	l.Client.Expire(item.Key, item.TTL)
-	//}
-	return nil
-}
-
-func (l *RedisLoader) loadList(item *RedisItem) error {
-	pipe := l.Client.Pipeline()
-	for _, i := range item.ListData {
-		pipe.LPush(item.Key, i)
+	args := []interface{}{obj.Key}
+	for i := 0; i < len(values); i += 2 {
+		member, _ := redis.String(values[i], nil)
+		score, _ := redis.Float64(values[i+1], nil)
+		args = append(args, score, member)
 	}
 
-	//if item.TTL != time.Second*-1 {
-	//	pipe.Expire(item.Key, item.TTL)
-	//}
-	pipe.Exec()
-	return nil
-}
-
-func (l *RedisLoader) loadHash(item *RedisItem) error {
-	if err := l.Client.HMSet(item.Key, item.HashData).Err(); err != nil {
-		return err
-	}
-
-	//if item.TTL != time.Second*-1 {
-	//	l.Client.Expire(item.Key, item.TTL)
-	//}
-	return nil
-}
-
-func (l *RedisLoader) loadSet(item *RedisItem) error {
-	pipe := l.Client.Pipeline()
-	for _, i := range item.ListData {
-		pipe.SAdd(item.Key, i)
-	}
-
-	//if item.TTL != time.Second*-1 {
-	//	pipe.Expire(item.Key, item.TTL)
-	//}
-	pipe.Exec()
-	return nil
-}
-
-func (l *RedisLoader) loadZSet(item *RedisItem) error {
-	pipe := l.Client.Pipeline()
-	for _, i := range item.ZSetData {
-		pipe.ZAdd(item.Key, i)
-	}
-
-	//if item.TTL != time.Second*-1 {
-	//	pipe.Expire(item.Key, item.TTL)
-	//}
-	pipe.Exec()
-	return nil
+	_, err = l.rc.Do("ZADD", args...)
+	return err
 }

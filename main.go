@@ -14,15 +14,17 @@ func check(err error) {
 }
 
 func main() {
-	configFilepath := flag.String("c", "example.config.json", "config file")
+	// parse cli args
+	configFilepath := flag.String("c", "redis-migrate.json", "path to config file")
 	taskName := flag.String("t", "default", "task name")
 	flag.Parse()
 
+	// load config
 	config := new(internal.MigrateConfig)
 	bytes, err := ioutil.ReadFile(*configFilepath)
 	check(err)
-	json.Unmarshal(bytes, config)
+	check(json.Unmarshal(bytes, config))
 
-	m := internal.NewRedisMigrate(config)
-	check(m.RunTask(*taskName))
+	// do migrate
+	check(internal.NewRedisMigrate(config).MigrateTask(*taskName))
 }

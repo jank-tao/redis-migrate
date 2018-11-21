@@ -4,60 +4,54 @@ import (
 	"io/ioutil"
 	"net"
 
+	"github.com/gomodule/redigo/redis"
 	"golang.org/x/crypto/ssh"
-	"gopkg.in/redis.v5"
 )
 
 type (
 	sshConfig struct {
 		Addr           string `json:"addr"`
-		PrivateKeyPath string `json:"private_key_path"`
 		Username       string `json:"username"`
+		PrivateKeyPath string `json:"private_key_path"`
+		Password       string `json:"password"`
 	}
 
-	RedisConfig struct {
+	redisConfig struct {
 		Addr      string     `json:"addr"`
 		Password  string     `json:"password"`
 		DB        int        `json:"db"`
 		SSHConfig *sshConfig `json:"ssh_config"`
 	}
 
-	TaskConfig struct {
+	migrateOption struct {
+		IgnoreTTL bool
+	}
+
+	taskConfig struct {
 		From     string   `json:"from"`
 		To       string   `json:"to"`
 		Patterns []string `json:"patterns"`
+		migrateOption
 	}
 
 	MigrateConfig struct {
-		Redis map[string]RedisConfig `json:"redis"`
-		Tasks map[string]TaskConfig  `json:"tasks"`
+		Redis map[string]redisConfig `json:"redis"`
+		Tasks map[string]taskConfig  `json:"tasks"`
 	}
 )
 
-func (c RedisConfig) Client() (*redis.Client, error) {
+func (c redisConfig) Client() (redis.Conn, error) {
 	if c.SSHConfig == nil {
 		return c.newClient()
 	}
 	return c.newSSHClient()
 }
 
-func (c RedisConfig) newClient() (*redis.Client, error) {
-	rc := redis.NewClient(
-		&redis.Options{
-			Addr:     c.Addr,
-			Password: c.Password,
-			DB:       c.DB,
-		},
-	)
-	if err := rc.Ping().Err(); err != nil {
-		return nil, err
-	}
-	return rc, nil
+func (c redisConfig) newClient() (redis.Conn, error) {
+	return redis.Dial("tcp", c.Addr, redis.DialPassword(c.Password), redis.DialDatabase(c.DB))
 }
 
-func (c RedisConfig) newSSHClient() (*redis.Client, error) {
-	if c.SSHConfig.PrivateKeyPath == "" {
-	}
+func (c redisConfig) newSSHClient() (redis.Conn, error) {
 	privateKey, err := ioutil.ReadFile(c.SSHConfig.PrivateKeyPath)
 	if err != nil {
 		return nil, err
@@ -66,10 +60,11 @@ func (c RedisConfig) newSSHClient() (*redis.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	rc := redis.NewClient(&redis.Options{
-		Password: c.Password,
-		DB:       c.DB,
-		Dialer: func() (net.Conn, error) {
+
+	return redis.Dial("tcp", c.Addr,
+		redis.DialPassword(c.Password),
+		redis.DialDatabase(c.DB),
+		redis.DialNetDial(func(network, addr string) (net.Conn, error) {
 			conn, err := net.Dial("tcp", c.SSHConfig.Addr)
 			if err != nil {
 				return nil, err
@@ -85,12 +80,7 @@ func (c RedisConfig) newSSHClient() (*redis.Client, error) {
 				return nil, err
 			}
 			client := ssh.NewClient(sshConn, chans, reqs)
-			return client.Dial("tcp", c.Addr)
-		},
-	})
-	if err := rc.Ping().Err(); err != nil {
-		return nil, err
-	}
-
-	return rc, nil
+			return client.Dial(network, addr)
+		}))
 }
+

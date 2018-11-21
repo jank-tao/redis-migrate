@@ -2,54 +2,53 @@ package internal
 
 import (
 	"fmt"
-	"gopkg.in/redis.v5"
+	"github.com/gomodule/redigo/redis"
 )
 
-type RedisMigrate struct {
-	config *MigrateConfig
-}
+// ======================
+// RedisMigrate interface
 
-func NewRedisMigrate(config *MigrateConfig) *RedisMigrate {
-	return &RedisMigrate{
+type IRedisMigrate = *redisMigrate
+
+func NewRedisMigrate(config *MigrateConfig) *redisMigrate {
+	return &redisMigrate{
 		config: config,
 	}
 }
 
-func (m *RedisMigrate) RunTask(name string) error {
-	fromclient, err := m.config.Redis[m.config.Tasks[name].From].Client()
+// ======================
+// RedisMigrate implement
+
+type redisMigrate struct {
+	config *MigrateConfig
+}
+
+func (m *redisMigrate) MigrateTask(name string) error {
+	config := m.config.Tasks[name]
+	from, err := m.config.Redis[config.From].Client()
 	if err != nil {
 		return err
 	}
-	toclient, err := m.config.Redis[m.config.Tasks[name].To].Client()
+	to, err := m.config.Redis[config.To].Client()
 	if err != nil {
 		return err
 	}
 
-	runner := &MigrateRunner{
-		fromClient: fromclient,
-		toClient:   toclient,
-		dumper:     &RedisDumper{fromclient},
-		loader:     &RedisLoader{toclient},
-	}
-	return runner.Migrate(m.config.Tasks[name].Patterns...)
+	return Migrate(from, to, config.migrateOption, m.config.Tasks[name].Patterns...)
 }
 
-type MigrateRunner struct {
-	fromClient *redis.Client
-	toClient   *redis.Client
-	dumper     *RedisDumper
-	loader     *RedisLoader
-}
+func Migrate(from, to redis.Conn, opt migrateOption, patterns ...string) error {
+	dumper := NewRedisDumper(from)
+	loader := NewRedisLoader(to)
 
-func (m *MigrateRunner) Migrate(patterns ...string) error {
 	for _, pattern := range patterns {
-		keys, err := m.fromClient.Keys(pattern).Result()
+		keys, err := redis.Strings(from.Do("KEYS", pattern))
 		if err != nil {
 			return err
 		}
 
 		for _, key := range keys {
-			if err := m.MigrateKey(key); err != nil {
+			if err := MigrateKey(dumper, loader, opt, key); err != nil {
 				return err
 			}
 		}
@@ -58,11 +57,11 @@ func (m *MigrateRunner) Migrate(patterns ...string) error {
 	return nil
 }
 
-func (m *MigrateRunner) MigrateKey(key string) error {
+func MigrateKey(dumper IRedisDumper, loader IRedisLoader, opt migrateOption, key string) error {
 	fmt.Println("migrate: ", key)
-	item, err := m.dumper.Dump(key)
+	obj, err := dumper.Dump(key, opt)
 	if err != nil {
 		return err
 	}
-	return m.loader.Load(item)
+	return loader.Load(obj, opt)
 }
