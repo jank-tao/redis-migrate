@@ -1,6 +1,9 @@
 package internal
 
-import "time"
+import (
+	"gopkg.in/redis.v5"
+	"time"
+)
 
 type RedisItem struct {
 	Key        string
@@ -9,4 +12,5 @@ type RedisItem struct {
 	StringData string
 	ListData   []string
 	HashData   map[string]string
+	ZSetData   []redis.Z
 }

@@ -38,6 +38,8 @@ func (l *RedisLoader) Load(item *RedisItem) error {
 		return l.loadHash(item)
 	case "set":
 		return l.loadSet(item)
+	case "zset":
+		return l.loadZSet(item)
 	}
 	return nil
 }
@@ -82,6 +84,19 @@ func (l *RedisLoader) loadSet(item *RedisItem) error {
 	pipe := l.Client.Pipeline()
 	for _, i := range item.ListData {
 		pipe.SAdd(item.Key, i)
+	}
+
+	if item.TTL != time.Second*-1 {
+		pipe.Expire(item.Key, item.TTL)
+	}
+	pipe.Exec()
+	return nil
+}
+
+func (l *RedisLoader) loadZSet(item *RedisItem) error {
+	pipe := l.Client.Pipeline()
+	for _, i := range item.ZSetData {
+		pipe.ZAdd(item.Key, i)
 	}
 
 	if item.TTL != time.Second*-1 {

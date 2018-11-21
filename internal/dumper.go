@@ -42,6 +42,8 @@ func (d *RedisDumper) Dump(key string) (*RedisItem, error) {
 		return d.dumpHash(key)
 	case "set":
 		return d.dumpSet(key)
+	case "zset":
+		return d.dumpZSet(key)
 	}
 	return nil, nil
 }
@@ -117,6 +119,24 @@ func (d *RedisDumper) dumpSet(key string) (*RedisItem, error) {
 	return &RedisItem{
 		Key:      key,
 		Type:     "set",
+		TTL:      ttl,
+		ListData: data,
+	}, nil
+}
+func (d *RedisDumper) dumpZSet(key string) (*RedisItem, error) {
+	data, err := d.Client.ZRangeWithScores(key, 0, 9999999).Result()
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+
+	ttl, err := d.Client.TTL(key).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	return &RedisItem{
+		Key:      key,
+		Type:     "zset",
 		TTL:      ttl,
 		ListData: data,
 	}, nil
