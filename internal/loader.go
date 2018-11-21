@@ -20,6 +20,10 @@ func (l *RedisLoader) LoadItems(items ...*RedisItem) error {
 }
 
 func (l *RedisLoader) Load(item *RedisItem) error {
+	if item == nil {
+		return nil
+	}
+
 	ok, err := l.Client.Exists(item.Key).Result()
 	if err != nil {
 		return err
