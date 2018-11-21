@@ -138,6 +138,6 @@ func (d *RedisDumper) dumpZSet(key string) (*RedisItem, error) {
 		Key:      key,
 		Type:     "zset",
 		TTL:      ttl,
-		ListData: data,
+		ZSetData: data,
 	}, nil
 }
