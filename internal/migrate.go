@@ -1,11 +1,8 @@
 package internal
 
 import (
-	"context"
 	"fmt"
 	"github.com/gomodule/redigo/redis"
-	"runtime"
-	"sync"
 )
 
 // ======================
@@ -44,31 +41,6 @@ func Migrate(from, to redis.Conn, opt migrateOption, patterns ...string) error {
 	dumper := NewRedisDumper(from)
 	loader := NewRedisLoader(to)
 
-	var keyChan = make(chan string, 1000)
-	var cancels []context.CancelFunc
-	var wg sync.WaitGroup
-	for i := 0; i < runtime.NumCPU()*2; i++ {
-		ctx, cancel := context.WithCancel(context.TODO())
-		cancels = append(cancels, cancel)
-		wg.Add(1)
-		go func(ctx context.Context) {
-			defer wg.Done()
-			done := false
-			for {
-				select {
-				case key := <-keyChan:
-					MigrateKey(dumper, loader, opt, key)
-				case <-ctx.Done():
-					done = true
-
-				}
-				if done && len(keyChan) == 0 {
-					return
-				}
-			}
-		}(ctx)
-	}
-
 	for _, pattern := range patterns {
 		keys, err := redis.Strings(from.Do("KEYS", pattern))
 		if err != nil {
@@ -76,16 +48,10 @@ func Migrate(from, to redis.Conn, opt migrateOption, patterns ...string) error {
 		}
 
 		for _, key := range keys {
-			//MigrateKey(dumper, loader, opt, key)
-			keyChan <- key
+			MigrateKey(dumper, loader, opt, key)
 		}
 	}
 
-	for _, cancel := range cancels {
-		cancel()
-	}
-
-	wg.Wait()
 	return nil
 }
 
