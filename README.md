@@ -3,7 +3,7 @@ redis-migrate is a tool to migrate data between redis databases.
 
 ## install
 ```
-go get -u -v https://github.com/liguangsheng/redis-migrate
+go get -u -v github.com/liguangsheng/redis-migrate
 ```
 
 usage:
